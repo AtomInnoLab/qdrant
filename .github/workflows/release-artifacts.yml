@@ -47,6 +47,7 @@ jobs:
           bin: qdrant
           target: ${{ matrix.target }}
           token: ${{ secrets.GITHUB_TOKEN }}
+          args: --features multiling-chinese,multiling-japanese,multiling-korean
       - name: Build Debian Package
         if: matrix.target == 'x86_64-unknown-linux-musl'
         run: |
@@ -88,6 +89,7 @@ jobs:
           bin: qdrant
           target: ${{ matrix.target }}
           token: ${{ secrets.GITHUB_TOKEN }}
+          args: --features multiling-chinese,multiling-japanese,multiling-korean
 
   build-windows-binaries:
     strategy:
@@ -106,13 +108,14 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build
-        run: cargo build --release --locked
+        run: cargo build --release --locked --features multiling-chinese,multiling-japanese,multiling-korean
 
       - name: Build and publish
         uses: taiki-e/upload-rust-binary-action@v1
         with:
           bin: qdrant
           token: ${{ secrets.GITHUB_TOKEN }}
+          args: --features multiling-chinese,multiling-japanese,multiling-korean
 
   build-app-image:
     strategy:
@@ -137,7 +140,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Build release binary
-        run: cargo build --release --locked
+        run: cargo build --release --locked --features multiling-chinese,multiling-japanese,multiling-korean
 
       - name: Build AppImage
         shell: bash
