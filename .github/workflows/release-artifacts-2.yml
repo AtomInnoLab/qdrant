@@ -1,0 +1,103 @@
+name: Build and publish release packages
+permissions:
+  contents: write
+on:
+  release:
+    # 'published' is triggered when publishing draft release, 'created' is not
+    types: [published]
+
+jobs:
+  build-linux-binaries:
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-22.04-arm
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-multilib clang cmake protobuf-compiler
+          rustup default stable
+          rustup update
+          rustup show
+          cargo -Vv
+      - uses: actions/checkout@v4
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install cross-compilation tools
+        with:
+          target: ${{ matrix.target }}
+        if: startsWith(matrix.os, 'ubuntu') && contains(matrix.target, '-musl')
+        uses: taiki-e/setup-cross-toolchain-action@v1
+      
+      - name: Build
+        run: cargo build --features multiling-chinese,multiling-japanese,multiling-korean --target ${{ matrix.target }} --release
+      - name: Rename binary
+        run: |
+          mv target/${{ matrix.target }}/release/qdrant qdrant-${{ matrix.target }}
+      - name: Upload binary as artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: qdrant-${{ matrix.target }}
+          path: qdrant-${{ matrix.target }}
+
+  build-mac-binaries:
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-apple-darwin
+            os: macos-13
+          - target: aarch64-apple-darwin
+            os: macos-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Install dependencies
+        run: |
+          brew update-reset
+          brew install gcc cmake protobuf-c
+          rustup default stable
+          rustup update
+          rustup show
+          cargo -Vv
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: cargo build --features multiling-chinese,multiling-japanese,multiling-korean --target ${{ matrix.target }} --release
+      - name: Rename binary
+        run: |
+          mv target/${{ matrix.target }}/release/qdrant qdrant-${{ matrix.target }}
+      - name: Upload binary as artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: qdrant-${{ matrix.target }}
+          path: qdrant-${{ matrix.target }}  
+
+  upload-release-assets:
+    needs: [build-linux-binaries, build-mac-binaries]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install GitHub CLI
+        uses: DougEdey/setup-gh@v1
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: release-artifacts
+      - name: Upload release assets
+        run: |
+          for artifact in ./release-artifacts/*.qdrant; do
+            TARGET=$(basename "$artifact" | sed 's/^qdrant-//;s/\.qdrant$//')
+            gh release upload --clobber -R ${{ github.repository }} ${{ github.event.release.id }} "$artifact" -n "qdrant-${TARGET}"
+          done
