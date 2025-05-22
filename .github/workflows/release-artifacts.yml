@@ -18,7 +18,7 @@ jobs:
             os: ubuntu-latest
 
           - target: aarch64-unknown-linux-musl
-            os: ubuntu-latest
+            os: ubuntu-22.04-arm
     runs-on: ${{ matrix.os }}
     steps:
       - name: Install dependencies
@@ -74,7 +74,7 @@ jobs:
       matrix:
         include:
           - target: x86_64-apple-darwin
-            os: macos-latest
+            os: macos-13
           - target: aarch64-apple-darwin
             os: macos-latest
     runs-on: ${{ matrix.os }}
