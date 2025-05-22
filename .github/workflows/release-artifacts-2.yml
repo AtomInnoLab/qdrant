@@ -52,5 +52,5 @@ jobs:
         run: |
           for artifact in ./release-artifacts/*.qdrant; do
             TARGET=$(basename "$artifact" | sed 's/^qdrant-//;s/\.qdrant$//')
-            gh release upload --clobber -R ${{ github.repository }} ${{ github.event.release.id }} "$artifact" -n "qdrant-${TARGET}"
+            gh release upload --clobber --name "qdrant-${TARGET}" -R ${{ github.repository }} ${{ github.event.release.id }} "$artifact"
           done
