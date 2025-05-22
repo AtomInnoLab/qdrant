@@ -1,4 +1,4 @@
-name: Build and publish release packages
+name: Build and publish release packages V2
 permissions:
   contents: write
 on:
