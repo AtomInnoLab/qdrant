@@ -40,7 +40,7 @@ jobs:
           rustup show
           cargo -Vv
         if: matrix.target == 'x86_64-unknown-linux-musl'
-        
+
       - uses: actions/checkout@v4
       - name: Install Protoc
         uses: arduino/setup-protoc@v3
@@ -101,10 +101,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install GitHub CLI
-        uses: DougEdey/setup-gh@v1
       - name: Download all build artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           path: release-artifacts
       - name: Upload release assets
