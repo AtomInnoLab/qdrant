@@ -41,19 +41,24 @@ jobs:
           target: ${{ matrix.target }}
         if: startsWith(matrix.os, 'ubuntu') && contains(matrix.target, '-musl')
         uses: taiki-e/setup-cross-toolchain-action@v1
-      - name: Build and publish
+      
+      - name: Build
+        run: cargo build --features multiling-chinese,multiling-japanese,multiling-korean --target ${{ matrix.target }} --release
+
+      - name: publish
         uses: taiki-e/upload-rust-binary-action@v1
         with:
           bin: qdrant
           target: ${{ matrix.target }}
           token: ${{ secrets.GITHUB_TOKEN }}
-          args: --features multiling-chinese,multiling-japanese,multiling-korean
+
       - name: Build Debian Package
         if: matrix.target == 'x86_64-unknown-linux-musl'
         run: |
           bash -x tools/sync-web-ui.sh
           cargo install cargo-deb
-          cargo deb --no-strip --target ${{ matrix.target }}
+          cargo deb --no-strip --target ${{ matrix.target }} --features multiling-chinese,multiling-japanese,multiling-korean
+
       - name: Upload Debian package
         if: matrix.target == 'x86_64-unknown-linux-musl'
         uses: svenstaro/upload-release-action@v2
@@ -83,7 +88,11 @@ jobs:
           rustup show
           cargo -Vv
       - uses: actions/checkout@v4
-      - name: Build and publish
+
+      - name: Build
+        run: cargo build --features multiling-chinese,multiling-japanese,multiling-korean --target ${{ matrix.target }} --release
+
+      - name: publish
         uses: taiki-e/upload-rust-binary-action@v1
         with:
           bin: qdrant
