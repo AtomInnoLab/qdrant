@@ -48,7 +48,7 @@ jobs:
         run: |
           mv target/${{ matrix.target }}/release/qdrant qdrant-${{ matrix.target }}
       - name: Upload binary as artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: qdrant-${{ matrix.target }}
           path: qdrant-${{ matrix.target }}
@@ -79,7 +79,7 @@ jobs:
         run: |
           mv target/${{ matrix.target }}/release/qdrant qdrant-${{ matrix.target }}
       - name: Upload binary as artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: qdrant-${{ matrix.target }}
           path: qdrant-${{ matrix.target }}  
