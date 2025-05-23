@@ -13,10 +13,8 @@ jobs:
         include:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
-
           - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
-
           - target: aarch64-unknown-linux-musl
             os: ubuntu-22.04-arm
     runs-on: ${{ matrix.os }}
@@ -64,6 +62,17 @@ jobs:
         with:
           name: qdrant-${{ matrix.target }}
           path: qdrant-${{ matrix.target }}
+      - name: Upload release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          type -p curl >/dev/null || (apt update && apt install curl -y)
+          curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+          && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
+          && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+          && apt update \
+          && apt install gh -y
+          gh release upload ${{ github.event.release.tag_name }} qdrant-${{ matrix.target }} --clobber
 
   build-mac-binaries:
     strategy:
@@ -96,18 +105,13 @@ jobs:
           name: qdrant-${{ matrix.target }}
           path: qdrant-${{ matrix.target }}  
 
-  upload-release-assets:
-    needs: [build-linux-binaries, build-mac-binaries]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Download all build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: release-artifacts
-      - name: Upload release assets
+      - name: Upload package tarball
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          for artifact in ./release-artifacts/*.qdrant; do
-            TARGET=$(basename "$artifact" | sed 's/^qdrant-//;s/\.qdrant$//')
-            gh release upload --clobber -R ${{ github.repository }} ${{ github.event.release.id }} "$artifact" -n "qdrant-${TARGET}"
-          done
+          if [[ $(sw_vers --productVersion ) =~ ^"13" ]];then
+            eval $(/usr/local/bin/brew shellenv)
+          else
+            eval $(/opt/homebrew/bin/brew shellenv)
+          fi
+          gh release upload ${{ github.event.release.tag_name }} qdrant-${{ matrix.target }} --clobber
