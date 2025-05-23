@@ -39,18 +39,14 @@ jobs:
           name: qdrant-${{ matrix.target }}
           path: qdrant-${{ matrix.target }}
 
-  upload-release-assets:
-    needs: [build-linux-binaries]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Download all build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: release-artifacts
-      - name: Upload release assets
+      - name: Upload package tarball
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          for artifact in ./release-artifacts/*.qdrant; do
-            TARGET=$(basename "$artifact" | sed 's/^qdrant-//;s/\.qdrant$//')
-            gh release upload --clobber --name "qdrant-${TARGET}" -R ${{ github.repository }} ${{ github.event.release.id }} "$artifact"
-          done
+          type -p curl >/dev/null || (apt update && apt install curl -y)
+          curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+          && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
+          && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+          && apt update \
+          && apt install gh -y
+          gh release upload ${{ github.event.release.tag_name }} qdrant-${{ matrix.target }} --clobber
