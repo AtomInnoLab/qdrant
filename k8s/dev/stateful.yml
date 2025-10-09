@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: qdrant
+  namespace: dev-ns
+spec:
+  serviceName: qdrant-headless
+  replicas: 3
+  selector:
+    matchLabels:
+      app: qdrant
+  template:
+    metadata:
+      labels:
+        app: qdrant
+    spec:
+      containers:
+        - name: qdrant
+          image: crpi-hytqalx0cm8oqxr4.cn-hangzhou.personal.cr.aliyuncs.com/mxrag-dev/qdrant:v1.14.1-cjk-language-support
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 6333
+              name: http
+            - containerPort: 6334
+              name: grpc
+            - containerPort: 6335
+              name: p2p
+          env:
+            - name: QDRANT__CLUSTER__ENABLED
+              value: "true"
+            - name: QDRANT__CLUSTER__HOST
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: QDRANT__SERVICE__PORT
+              value: "6333"
+            - name: QDRANT__CLUSTER__GRPC_PORT
+              value: "6334"
+            - name: QDRANT__CLUSTER__P2P__PORT
+              value: "6335"
+            - name: QDRANT__SERVICE__API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: qdrant-apikey-secret
+                  key: apikey
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          command:
+            - /bin/sh
+            - -c
+            - |
+              cd /qdrant
+              # 设置第一个peer的URI，其他peer使用bootstrap
+              if [ "$POD_NAME" = "qdrant-0" ]; then
+                echo "Starting first peer with URI"
+                exec ./qdrant --uri "http://$POD_NAME.qdrant-headless.$POD_NAMESPACE.svc.cluster.local:6335"
+              else
+                echo "Starting peer with bootstrap to qdrant-0"
+                exec ./qdrant --bootstrap "http://qdrant-0.qdrant-headless.$POD_NAMESPACE.svc.cluster.local:6335" --uri "http://$POD_NAME.qdrant-headless.$POD_NAMESPACE.svc.cluster.local:6335"
+              fi
+          volumeMounts:
+            - name: storage
+              mountPath: /qdrant/storage
+          resources:
+            requests:
+              memory: "2Gi"
+              cpu: "1"
+            limits:
+              memory: "4Gi"
+              cpu: "2"
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+      dnsPolicy: ClusterFirst
+      nodeSelector:
+        type: virtual-kubelet
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 120
+      tolerations:
+        - effect: NoSchedule
+          key: virtual-kubelet.io/provider
+          operator: Exists
+      volumes:
+        - name: storage
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: storage
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: "alicloud-disk-ssd"  # 阿里云新加坡 SSD 云盘
+        resources:
+          requests:
+            storage: 20Gi
