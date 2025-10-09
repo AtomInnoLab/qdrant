@@ -141,6 +141,38 @@ kubectl -n dev-ns exec -it qdrant-0 -- \
 kubectl apply -f stateful.yml
 ```
 
+### 增加 Qdrant 集群节点（例如：3 -> 5）
+
+方式一：编辑清单
+1) 修改 `stateful.yml`：
+```yaml
+spec:
+  replicas: 5
+```
+2) 应用并等待滚动完成：
+```bash
+kubectl apply -f stateful.yml
+kubectl rollout status statefulset/qdrant -n dev-ns --timeout=10m
+```
+
+方式二：直接伸缩命令
+```bash
+kubectl scale statefulset qdrant -n dev-ns --replicas=5
+kubectl rollout status statefulset/qdrant -n dev-ns --timeout=10m
+```
+
+验证：
+```bash
+kubectl -n dev-ns get pods -l app=qdrant -o wide
+kubectl -n dev-ns logs qdrant-3 --tail=100  # 新增 Pod 的日志
+kubectl -n dev-ns logs qdrant-4 --tail=100
+```
+
+注意：
+- 新增副本会以相同启动参数加入集群，`qdrant-0` 作为 bootstrap 节点即可完成拉起与共识。
+- 请确保节点资源充足（CPU/内存/磁盘），必要时先执行“新增节点（ACK 节点池）”或“升级实例规格”。
+- 集群扩容后，数据与分片的再平衡可能需要时间，期间查询/写入可正常进行但整体抖动取决于数据量与网络带宽。
+
 ## 阿里云 ACK 扩容与规格升级
 
 以下步骤适用于当前使用的 `alicloud-disk-ssd` 存储类与 `StatefulSet` 部署方式。
