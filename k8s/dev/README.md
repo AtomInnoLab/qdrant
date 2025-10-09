@@ -1,50 +1,78 @@
-# Qdrant Kubernetes 集群部署
+# Qdrant Kubernetes 集群部署（dev 环境）
 
-这个目录包含了在Kubernetes上部署Qdrant集群的所有配置文件。
+该目录包含在 Kubernetes 上部署 Qdrant 集群（dev 环境）的所有清单与脚本。
 
 ## 文件说明
 
-- `secrets.yml` - API密钥配置
-- `headless-service.yml` - Headless Service，用于StatefulSet
-- `service.yml` - 普通Service，用于外部访问
-- `stateful.yml` - StatefulSet配置，包含3个Qdrant实例
-- `ingress.yml` - Ingress配置，用于外部访问
-- `deploy.sh` - 自动部署脚本
+- `secrets.yml`：API 密钥配置（注入到 `QDRANT__SERVICE__API_KEY`）
+- `headless-service.yml`：Headless Service，供 `StatefulSet` 内部发现与 P2P 通信
+- `service.yml`：ClusterIP Service，对外暴露 HTTP API（由 Ingress 入口）
+- `stateful.yml`：StatefulSet 配置，3 副本集群，开放 6333/6334/6335 端口
+- `ingress.yml`：Ingress（ALB），域名与 TLS 终止配置
+- `deploy.sh`：一键部署脚本
+
+## 部署前置
+
+- 已在 Kubernetes 集群安装并启用 ALB Ingress Controller。
+- 已在 DNS 中将 `qdrant.dev.atominnolab.com` 指向 ALB。
+- 已在集群中准备好 TLS Secret：`ssl-dev.atominnotab.com`（请确认 Secret 名称与证书资源一致）。
+
+提示：`ingress.yml` 中当前配置为：
+- 域名：`qdrant.dev.atominnolab.com`
+- TLS Secret：`ssl-dev.atominnotab.com`
+
+如需变更，请同步修改 `ingress.yml` 中 `spec.rules[0].host`、`spec.tls[0].hosts` 与 `spec.tls[0].secretName`。
 
 ## 部署步骤
 
-### 1. 准备API密钥
+### 1) 准备 API 密钥 Secret
 
-首先需要创建API密钥Secret：
+推荐使用 `stringData`，避免手动 base64 和换行符问题：
 
-```bash
-kubectl create secret generic qdrant-apikey-secret \
-  --from-literal=apikey=your-api-key-here \
-  -n dev-ns
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: qdrant-apikey-secret
+  namespace: dev-ns
+type: Opaque
+stringData:
+  apikey: your-api-key-here
 ```
 
-### 2. 修改配置
+应用：
+```bash
+kubectl apply -f secrets.yml
+```
 
-根据需要修改以下配置：
+若坚持使用 `data`，请确保 base64 编码不带换行：
+```bash
+echo -n 'your-api-key-here' | base64
+# 将输出替换到 secrets.yml 的 data.apikey 中
+```
 
-- `ingress.yml` - 修改域名 `qdrant.dev.example.com` 为你的实际域名
-- `stateful.yml` - 修改镜像地址、资源限制等
+### 2) 修改配置（如需）
 
-### 3. 部署集群
+- `ingress.yml`：域名、TLS Secret
+- `stateful.yml`：镜像、资源、存储类、节点选择器等
+  - 副本数：`replicas: 3`
+  - 端口：HTTP 6333、gRPC 6334、P2P 6335
+  - 环境变量：
+    - `QDRANT__SERVICE__API_KEY`（来自 Secret）
+    - `QDRANT__CLUSTER__ENABLED=true`
+    - `QDRANT__CLUSTER__HOST`（Pod IP）
+  - 存储：`storageClassName: alicloud-disk-ssd`，请求 `20Gi`
 
-使用部署脚本自动部署：
+### 3) 部署
 
+一键脚本：
 ```bash
 ./deploy.sh
 ```
 
-或者手动部署：
-
+或手动：
 ```bash
-# 创建命名空间
-kubectl create namespace dev-ns
-
-# 部署所有资源
+kubectl create namespace dev-ns --dry-run=client -o yaml | kubectl apply -f -
 kubectl apply -f secrets.yml
 kubectl apply -f headless-service.yml
 kubectl apply -f service.yml
@@ -52,79 +80,63 @@ kubectl apply -f stateful.yml
 kubectl apply -f ingress.yml
 ```
 
-### 4. 验证部署
+### 4) 验证
 
 ```bash
-# 检查Pod状态
 kubectl get pods -n dev-ns -l app=qdrant
-
-# 检查服务状态
 kubectl get svc -n dev-ns
-
-# 检查Ingress状态
 kubectl get ingress -n dev-ns
-```
-
-## 集群配置说明
-
-### 集群架构
-
-- **3个Qdrant实例**：qdrant-0, qdrant-1, qdrant-2
-- **第一个实例（qdrant-0）**：作为集群的初始leader
-- **其他实例**：通过bootstrap连接到qdrant-0
-
-### 端口配置
-
-- **6333** - HTTP API端口
-- **6334** - gRPC端口
-- **6335** - P2P集群通信端口
-
-### 存储配置
-
-- 使用阿里云SSD云盘（alicloud-disk-ssd）
-- 每个实例20GB存储空间
-- 持久化存储
-
-## 故障排除
-
-### 常见问题
-
-1. **"First peer should specify its uri"错误**
-   - 解决方案：确保第一个peer（qdrant-0）正确设置了URI
-   - 检查StatefulSet中的command配置
-
-2. **"qdrant: not found"错误**
-   - 解决方案：确保使用正确的可执行文件路径
-   - Qdrant可执行文件位于`/qdrant/qdrant`，需要在启动前切换到该目录
-
-3. **Pod无法启动**
-   - 检查镜像拉取权限
-   - 检查API密钥Secret是否正确创建
-   - 检查存储类是否存在
-
-4. **集群无法形成共识**
-   - 检查P2P端口（6335）是否正确暴露
-   - 检查网络策略是否允许Pod间通信
-   - 检查DNS解析是否正常
-
-### 日志查看
-
-```bash
-# 查看特定Pod日志
-kubectl logs -n dev-ns qdrant-0
-
-# 查看所有Pod日志
-kubectl logs -n dev-ns -l app=qdrant
 ```
 
 ## 访问方式
 
-部署完成后，可以通过以下方式访问：
+- Web UI: https://qdrant.dev.atominnolab.com/dashboard
+- HTTP API: https://qdrant.dev.atominnolab.com
+- 集群内访问：`qdrant-svc.dev-ns.svc.cluster.local:6333`
 
-- **Web UI**: http://qdrant.dev.example.com/dashboard
-- **API**: http://qdrant.dev.example.com
-- **集群内访问**: qdrant-svc.dev-ns.svc.cluster.local:6333
+首次访问 Web UI 时，输入与服务端一致的 API Key（即 `Secret` 中的值）。
 
-## 扩展集群
+## 调用示例
 
-要扩展集群到更多实例，修改StatefulSet中的`replicas`字段，并更新相应的配置。
+- 使用 API Key（HTTP 推荐方式）
+
+```bash
+curl -H 'api-key: your-api-key-here' https://qdrant.dev.atominnolab.com/cluster
+```
+
+- 使用 JWT（可选）：若使用 `Authorization: Bearer <token>`，则 `<token>` 必须是由服务端同一密钥（HS256）签发的 JWT
+```bash
+curl -H 'Authorization: Bearer <your-jwt-token>' https://qdrant.dev.atominnolab.com/cluster
+```
+
+常见错误与提示：
+- 返回 `Invalid API key or JWT`：说明请求头不正确，或密钥/Token 不匹配。
+  - 使用 `api-key` 头而不是 `Authorization: Bearer sk-...`（后者会被当作 JWT 解析）。
+  - 确保 `Secret` 未引入换行符（`stringData` 推荐；若用 base64，请用 `echo -n`）。
+
+## 故障排除
+
+1) Pod 启动失败
+- 检查镜像拉取、`Secret` 是否存在、存储类是否可用。
+
+2) 集群未形成
+- 确认 P2P 端口 6335 与 Headless Service 工作正常，DNS 可解析 `qdrant-0.qdrant-headless.dev-ns.svc.cluster.local`。
+
+3) 401/认证失败
+- 校验 `Secret` 值与请求头完全一致；修正后执行：
+```bash
+kubectl rollout restart statefulset/qdrant -n dev-ns
+```
+
+4) 集群内自测
+```bash
+kubectl -n dev-ns exec -it qdrant-0 -- \
+  curl -s -i -H 'api-key: your-api-key-here' http://qdrant-svc.dev-ns.svc.cluster.local:6333/cluster
+```
+
+## 扩容
+
+修改 `stateful.yml` 的 `spec.replicas` 后应用：
+```bash
+kubectl apply -f stateful.yml
+```
