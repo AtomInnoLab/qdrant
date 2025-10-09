@@ -140,3 +140,80 @@ kubectl -n dev-ns exec -it qdrant-0 -- \
 ```bash
 kubectl apply -f stateful.yml
 ```
+
+## 阿里云 ACK 扩容与规格升级
+
+以下步骤适用于当前使用的 `alicloud-disk-ssd` 存储类与 `StatefulSet` 部署方式。
+
+### 升级实例规格（CPU/内存）
+
+1) 编辑 `stateful.yml`，调整容器 `resources.requests/limits`：
+
+```yaml
+resources:
+  requests:
+    memory: "4Gi"   # 例如从 2Gi 升到 4Gi
+    cpu: "2"       # 例如从 1 升到 2
+  limits:
+    memory: "8Gi"
+    cpu: "4"
+```
+
+2) 应用并滚动重启（ACK 会逐 Pod 按序重建，保证最小不可用）：
+
+```bash
+kubectl apply -f stateful.yml
+kubectl rollout restart statefulset/qdrant -n dev-ns
+kubectl rollout status statefulset/qdrant -n dev-ns --timeout=10m
+```
+
+3) 验证：
+
+```bash
+kubectl -n dev-ns get pods -l app=qdrant -o wide
+kubectl -n dev-ns top pod -l app=qdrant  # 如集群启用 metrics-server
+```
+
+提示：若底层节点资源不足，可能需要在 ACK 控制台扩容节点池或调整 `nodeSelector`/`tolerations` 以调度到有资源的节点。
+
+### 扩容磁盘（PVC 在线扩容）
+
+前提：`alicloud-disk-ssd` 存储类支持卷扩容（大多数 ACK 官方 CSI 已默认开启 `allowVolumeExpand`）。磁盘只支持“增大”，不支持缩小。
+
+1) 查看现有 PVC（`volumeClaimTemplates.name: storage` 会生成 `storage-qdrant-<id>`）：
+
+```bash
+kubectl -n dev-ns get pvc -l app=qdrant
+# 常见名称：storage-qdrant-0、storage-qdrant-1、storage-qdrant-2
+```
+
+2) 逐个扩容（示例将 20Gi 扩到 50Gi）：
+
+```bash
+kubectl -n dev-ns patch pvc storage-qdrant-0 --type merge -p '{"spec":{"resources":{"requests":{"storage":"50Gi"}}}}'
+kubectl -n dev-ns patch pvc storage-qdrant-1 --type merge -p '{"spec":{"resources":{"requests":{"storage":"50Gi"}}}}'
+kubectl -n dev-ns patch pvc storage-qdrant-2 --type merge -p '{"spec":{"resources":{"requests":{"storage":"50Gi"}}}}'
+```
+
+3) 观察扩容进度：
+
+```bash
+kubectl -n dev-ns get pvc storage-qdrant-{0..2} -w
+```
+
+4) 文件系统扩容：大多数情况下，ACK + Alibaba Cloud CSI 支持在线文件系统扩容，状态就绪后 Pod 内会自动识别新容量；若未自动扩容，可对单个 Pod 执行重启以触发：
+
+```bash
+kubectl -n dev-ns delete pod qdrant-0  # StatefulSet 会自动重建该 Pod
+```
+
+5) 校验容量：
+
+```bash
+kubectl -n dev-ns exec -it qdrant-0 -- df -h /qdrant/storage
+```
+
+注意：
+- 扩容顺序建议逐个副本执行，以降低业务影响。
+- 不要减小 `requests.storage`，Kubernetes 与底层云盘不支持收缩。
+- 如存储类未开启扩容，请在 ACK 中启用支持扩容的存储类或新建具备 `allowVolumeExpansion: true` 的存储类后再迁移。
