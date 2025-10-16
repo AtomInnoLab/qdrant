@@ -108,15 +108,27 @@ kubectl get ingress -n dev-ns
 ### 集群内访问（HTTP API）
 
 ```bash
-# 使用 API Key（集群内访问）
-curl -H 'api-key: your-api-key-here' http://qdrant-svc.dev-ns.svc.cluster.local:6333/cluster
+# 检查集群状态
+curl -H "api-key: your-api-key-here" http://qdrant-svc.dev-ns.svc.cluster.local:6333/cluster
+
+# 输出示例：
+# {"result":{"status":"enabled","peer_id":701876790728766,"peers":{"5255297403071266":{"uri":"http://qdrant-1.qdrant-headless.dev-ns.svc.cluster.local:6335/"},"5421380362255310":{"uri":"http://qdrant-2.qdrant-headless.dev-ns.svc.cluster.local:6335/"},"701876790728766":{"uri":"http://qdrant-0.qdrant-headless.dev-ns.svc.cluster.local:6335/"}},"raft_info":{"term":1,"commit":9,"pending_operations":0,"leader":701876790728766,"role":"Leader","is_voter":true},"consensus_thread_status":{"consensus_thread_status":"working","last_update":"2025-10-16T11:56:14.886925444Z"},"message_send_failures":{}},"status":"ok","time":8.24e-6}
+
+# 查看集合列表
+curl -H "api-key: your-api-key-here" http://qdrant-svc.dev-ns.svc.cluster.local:6333/collections
+
+# 输出示例：
+# {"result":{"collections":[]},"status":"ok","time":7.875e-6}
+
+# 检查 Dashboard 状态
+curl -H "api-key: your-api-key-here" http://qdrant-svc.dev-ns.svc.cluster.local:6333/dashboard -IL
 ```
 
 ### 外部访问（gRPC）
 
 ```bash
 # 列出所有可用的 gRPC 服务（外部访问）
-grpcurl -H "api-key: sk-eXr5+cVKlbWhorfIn4ckRA" qdrant.dev.atominnolab.com:443 list
+grpcurl -H "api-key: your-api-key-here" qdrant.dev.atominnolab.com:443 list
 
 # 输出示例：
 # grpc.health.v1.Health
@@ -130,8 +142,51 @@ grpcurl -H "api-key: sk-eXr5+cVKlbWhorfIn4ckRA" qdrant.dev.atominnolab.com:443 l
 
 ```bash
 # 集群内 gRPC 访问
-grpcurl -H "api-key: sk-eXr5+cVKlbWhorfIn4ckRA" qdrant-svc.dev-ns.svc.cluster.local:6334 list
+grpcurl -H "api-key: your-api-key-here" qdrant-svc.dev-ns.svc.cluster.local:6334 list
 ```
+
+## 集群状态说明
+
+### 集群状态响应解析
+
+当集群正常运行且为 Leader 节点时，`/cluster` 接口会返回类似以下信息：
+
+```json
+{
+  "result": {
+    "status": "enabled",
+    "peer_id": 701876790728766,
+    "peers": {
+      "5255297403071266": {"uri": "http://qdrant-1.qdrant-headless.dev-ns.svc.cluster.local:6335/"},
+      "5421380362255310": {"uri": "http://qdrant-2.qdrant-headless.dev-ns.svc.cluster.local:6335/"},
+      "701876790728766": {"uri": "http://qdrant-0.qdrant-headless.dev-ns.svc.cluster.local:6335/"}
+    },
+    "raft_info": {
+      "term": 1,
+      "commit": 9,
+      "pending_operations": 0,
+      "leader": 701876790728766,
+      "role": "Leader",
+      "is_voter": true
+    },
+    "consensus_thread_status": {
+      "consensus_thread_status": "working",
+      "last_update": "2025-10-16T11:56:14.886925444Z"
+    },
+    "message_send_failures": {}
+  },
+  "status": "ok",
+  "time": 8.24e-6
+}
+```
+
+**关键字段说明**：
+- `status`: "enabled" 表示集群已启用
+- `peers`: 显示集群中的所有节点及其 URI
+- `raft_info.role`: "Leader" 表示当前节点为领导者
+- `raft_info.leader`: 当前领导者的 peer_id
+- `consensus_thread_status`: "working" 表示共识线程正常工作
+- `message_send_failures`: 空对象表示没有消息发送失败
 
 - 使用 JWT（可选）：若使用 `Authorization: Bearer <token>`，则 `<token>` 必须是由服务端同一密钥（HS256）签发的 JWT
 ```bash
