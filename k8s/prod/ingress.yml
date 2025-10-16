@@ -8,22 +8,22 @@ metadata:
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS": 443}]'
   labels:
     ingress-controller: alb
-  name: qdrant-ingress
-  namespace: dev-ns
+  name: qdrant-ingress-prod
+  namespace: prod-ns
 spec:
   ingressClassName: alb
   rules:
-    - host: qdrant.dev.atominnolab.com
+    - host: qdrant.atominnolab.com
       http:
         paths:
           - backend:
               service:
-                name: qdrant-headless
+                name: qdrant-headless-prod
                 port:
                   number: 6334
             path: /
             pathType: Prefix
   tls:
     - hosts:
-        - qdrant.dev.atominnolab.com
-      secretName: ssl-dev.atominnotab.com
+        - qdrant.atominnolab.com
+      secretName: tls-atominnolab.com

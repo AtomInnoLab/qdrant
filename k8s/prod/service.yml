@@ -1,8 +1,8 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: qdrant-svc
-  namespace: dev-ns
+  name: qdrant-svc-prod
+  namespace: prod-ns
 spec:
   internalTrafficPolicy: Cluster
   ipFamilies:
@@ -14,5 +14,5 @@ spec:
       protocol: TCP
       name: http
   selector:
-    app: qdrant
+    app: qdrant-prod
   type: ClusterIP

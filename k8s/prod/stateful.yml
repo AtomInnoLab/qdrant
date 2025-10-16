@@ -2,39 +2,39 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   annotations:
-  name: qdrant
-  namespace: dev-ns
+  name: qdrant-prod
+  namespace: prod-ns
 spec:
   persistentVolumeClaimRetentionPolicy:
     whenDeleted: Retain
     whenScaled: Retain
   podManagementPolicy: OrderedReady
+  serviceName: qdrant-headless-prod
   replicas: 3
   revisionHistoryLimit: 10
   selector:
     matchLabels:
-      app: qdrant
-  serviceName: qdrant-headless
+      app: qdrant-prod
   template:
     metadata:
       annotations:
       labels:
-        app: qdrant
+        app: qdrant-prod
     spec:
       containers:
-        - command:
-            - /bin/sh
-            - '-c'
-            - |
-              cd /qdrant
-              # 设置第一个peer的URI，其他peer使用bootstrap
-              if [ "$POD_NAME" = "qdrant-0" ]; then
-                echo "Starting first peer with URI"
-                exec ./qdrant --uri "http://$POD_NAME.qdrant-headless.$POD_NAMESPACE.svc.cluster.local:6335"
-              else
-                echo "Starting peer with bootstrap to qdrant-0"
-                exec ./qdrant --bootstrap "http://qdrant-0.qdrant-headless.$POD_NAMESPACE.svc.cluster.local:6335" --uri "http://$POD_NAME.qdrant-headless.$POD_NAMESPACE.svc.cluster.local:6335"
-              fi
+        - name: qdrant
+          image: crpi-hytqalx0cm8oqxr4.cn-hangzhou.personal.cr.aliyuncs.com/mxrag-dev/qdrant:v1.14.1-cjk-language-support
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 6333
+              name: http
+              protocol: TCP
+            - containerPort: 6334
+              name: grpc
+              protocol: TCP
+            - containerPort: 6335
+              name: p2p
+              protocol: TCP
           env:
             - name: QDRANT__CLUSTER__ENABLED
               value: 'true'
@@ -53,7 +53,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   key: apikey
-                  name: qdrant-apikey-secret
+                  name: qdrant-apikey-secret-prod
             - name: POD_NAME
               valueFrom:
                 fieldRef:
@@ -64,20 +64,24 @@ spec:
                 fieldRef:
                   apiVersion: v1
                   fieldPath: metadata.namespace
-          image: >-
-            crpi-hytqalx0cm8oqxr4.cn-hangzhou.personal.cr.aliyuncs.com/mxrag-dev/qdrant:v1.14.1-cjk-language-support
-          imagePullPolicy: IfNotPresent
-          name: qdrant
-          ports:
-            - containerPort: 6333
-              name: http
-              protocol: TCP
-            - containerPort: 6334
-              name: grpc
-              protocol: TCP
-            - containerPort: 6335
-              name: p2p
-              protocol: TCP
+          command:
+            - /bin/sh
+            - '-c'
+            - |
+              cd /qdrant
+              # 设置第一个peer的URI，其他peer使用bootstrap
+              if [ "$POD_NAME" = "qdrant-prod-0" ]; then
+                echo "Starting first peer with URI"
+                exec ./qdrant --uri "http://$POD_NAME.qdrant-headless-prod.$POD_NAMESPACE.svc.cluster.local:6335"
+              else
+                echo "Starting peer with bootstrap to qdrant-prod-0"
+                exec ./qdrant --bootstrap "http://qdrant-prod-0.qdrant-headless-prod.$POD_NAMESPACE.svc.cluster.local:6335" --uri "http://$POD_NAME.qdrant-headless-prod.$POD_NAMESPACE.svc.cluster.local:6335"
+              fi
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /qdrant/storage
+              name: storage
           resources:
             limits:
               cpu: '2'
@@ -85,14 +89,9 @@ spec:
             requests:
               cpu: '1'
               memory: 2Gi
-          terminationMessagePath: /dev/termination-log
-          terminationMessagePolicy: File
-          volumeMounts:
-            - mountPath: /qdrant/storage
-              name: storage
       dnsPolicy: ClusterFirst
       imagePullSecrets:
-        - name: qdrant-registry-secret
+        - name: qdrant-registry-secret-prod
       nodeSelector:
         type: virtual-kubelet
       restartPolicy: Always
