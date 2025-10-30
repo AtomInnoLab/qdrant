@@ -3,7 +3,7 @@ kind: StatefulSet
 metadata:
   annotations:
   name: qdrant
-  namespace: dev-ns
+  namespace: pre
 spec:
   persistentVolumeClaimRetentionPolicy:
     whenDeleted: Retain

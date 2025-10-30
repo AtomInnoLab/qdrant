@@ -17,10 +17,6 @@ kubectl apply -f secrets.yml
 echo "部署headless service..."
 kubectl apply -f headless-service.yml
 
-# 部署普通service
-echo "部署service..."
-kubectl apply -f service.yml
-
 # 部署StatefulSet
 echo "部署StatefulSet..."
 kubectl apply -f stateful.yml

@@ -6,9 +6,9 @@
 
 - `secrets.yml`：API 密钥配置（注入到 `QDRANT__SERVICE__API_KEY`）
 - `headless-service.yml`：Headless Service，供 `StatefulSet` 内部发现与 P2P 通信
-- `service.yml`：ClusterIP Service，对外暴露 HTTP API（由 Ingress 入口）
 - `stateful.yml`：StatefulSet 配置，3 副本集群，开放 6333/6334/6335 端口
-- `ingress.yml`：Ingress（ALB），域名与 TLS 终止配置
+- `ingress.yml`：Ingress（ALB），gRPC API 域名与 TLS 终止配置
+- `ingress-dashboard.yml`：Ingress（ALB），Dashboard 域名配置
 - `deploy.sh`：一键部署脚本
 
 ## 部署前置
@@ -75,9 +75,9 @@ echo -n 'your-api-key-here' | base64
 kubectl create namespace dev-ns --dry-run=client -o yaml | kubectl apply -f -
 kubectl apply -f secrets.yml
 kubectl apply -f headless-service.yml
-kubectl apply -f service.yml
 kubectl apply -f stateful.yml
 kubectl apply -f ingress.yml
+kubectl apply -f ingress-dashboard.yml
 ```
 
 ### 4) 验证
@@ -92,11 +92,12 @@ kubectl get ingress -n dev-ns
 
 ### 外部访问（通过 Ingress）
 - gRPC API: `https://qdrant.dev.atominnolab.com:443`（仅支持 gRPC 协议）
+- Web Dashboard: `https://qdrant-dashboard.dev.atominnolab.com`（HTTP + Web UI）
 
 ### 集群内访问
-- HTTP API: `http://qdrant-svc.dev-ns.svc.cluster.local:6333`
-- gRPC API: `http://qdrant-svc.dev-ns.svc.cluster.local:6334`
-- Web Dashboard: `http://qdrant-svc.dev-ns.svc.cluster.local:6333/dashboard`
+- HTTP API: `http://qdrant-headless.dev-ns.svc.cluster.local:6333`
+- gRPC API: `http://qdrant-headless.dev-ns.svc.cluster.local:6334`
+- Web Dashboard: `http://qdrant-headless.dev-ns.svc.cluster.local:6333/dashboard`
 
 **注意**：
 - Ingress 只代理 gRPC 服务（端口 6334），不提供 HTTP API 和 Web Dashboard 的外部访问
@@ -109,19 +110,19 @@ kubectl get ingress -n dev-ns
 
 ```bash
 # 检查集群状态
-curl -H "api-key: your-api-key-here" http://qdrant-svc.dev-ns.svc.cluster.local:6333/cluster
+curl -H "api-key: your-api-key-here" http://qdrant-headless.dev-ns.svc.cluster.local:6333/cluster
 
 # 输出示例：
 # {"result":{"status":"enabled","peer_id":701876790728766,"peers":{"5255297403071266":{"uri":"http://qdrant-1.qdrant-headless.dev-ns.svc.cluster.local:6335/"},"5421380362255310":{"uri":"http://qdrant-2.qdrant-headless.dev-ns.svc.cluster.local:6335/"},"701876790728766":{"uri":"http://qdrant-0.qdrant-headless.dev-ns.svc.cluster.local:6335/"}},"raft_info":{"term":1,"commit":9,"pending_operations":0,"leader":701876790728766,"role":"Leader","is_voter":true},"consensus_thread_status":{"consensus_thread_status":"working","last_update":"2025-10-16T11:56:14.886925444Z"},"message_send_failures":{}},"status":"ok","time":8.24e-6}
 
 # 查看集合列表
-curl -H "api-key: your-api-key-here" http://qdrant-svc.dev-ns.svc.cluster.local:6333/collections
+curl -H "api-key: your-api-key-here" http://qdrant-headless.dev-ns.svc.cluster.local:6333/collections
 
 # 输出示例：
 # {"result":{"collections":[]},"status":"ok","time":7.875e-6}
 
 # 检查 Dashboard 状态
-curl -H "api-key: your-api-key-here" http://qdrant-svc.dev-ns.svc.cluster.local:6333/dashboard -IL
+curl -H "api-key: your-api-key-here" http://qdrant-headless.dev-ns.svc.cluster.local:6333/dashboard -IL
 ```
 
 ### 外部访问（gRPC）
@@ -142,7 +143,7 @@ grpcurl -H "api-key: your-api-key-here" qdrant.dev.atominnolab.com:443 list
 
 ```bash
 # 集群内 gRPC 访问
-grpcurl -H "api-key: your-api-key-here" qdrant-svc.dev-ns.svc.cluster.local:6334 list
+grpcurl -H "api-key: your-api-key-here" qdrant-headless.dev-ns.svc.cluster.local:6334 list
 ```
 
 ## 集群状态说明
@@ -216,11 +217,11 @@ kubectl rollout restart statefulset/qdrant -n dev-ns
 ```bash
 # HTTP API 测试
 kubectl -n dev-ns exec -it qdrant-0 -- \
-  curl -s -i -H 'api-key: your-api-key-here' http://qdrant-svc.dev-ns.svc.cluster.local:6333/cluster
+  curl -s -i -H 'api-key: your-api-key-here' http://qdrant-headless.dev-ns.svc.cluster.local:6333/cluster
 
 # gRPC API 测试（需要安装 grpcurl）
 kubectl -n dev-ns exec -it qdrant-0 -- \
-  grpcurl -H "api-key: your-api-key-here" qdrant-svc.dev-ns.svc.cluster.local:6334 list
+  grpcurl -H "api-key: your-api-key-here" qdrant-headless.dev-ns.svc.cluster.local:6334 list
 ```
 
 ## 扩容

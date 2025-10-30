@@ -17,10 +17,6 @@ kubectl apply -f secrets.yml
 echo "部署headless service..."
 kubectl apply -f headless-service.yml
 
-# 部署普通service
-echo "部署service..."
-kubectl apply -f service.yml
-
 # 部署StatefulSet
 echo "部署StatefulSet..."
 kubectl apply -f stateful.yml
@@ -39,5 +35,6 @@ echo "检查服务状态..."
 kubectl get svc -n dev-ns
 
 echo "Qdrant集群部署完成！"
-echo "Web UI地址: http://qdrant.dev.example.com/dashboard"
-echo "API地址: http://qdrant.dev.example.com"
+echo "外部 gRPC API: https://qdrant.dev.atominnolab.com:443"
+echo "Dashboard: https://qdrant-dashboard.dev.atominnolab.com"
+echo "集群内访问: http://qdrant-headless.dev-ns.svc.cluster.local:6333"
