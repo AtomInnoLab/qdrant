@@ -15,7 +15,7 @@ spec:
         paths:
           - backend:
               service:
-                name: qdrant-headless
+                name: qdrant-headless-prod
                 port:
                   number: 6333
             path: /
