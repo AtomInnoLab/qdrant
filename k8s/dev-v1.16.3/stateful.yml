@@ -1,0 +1,121 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  annotations:
+  name: qdrant-v1-16-3
+  namespace: dev-ns
+spec:
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+  podManagementPolicy: OrderedReady
+  replicas: 3
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: qdrant-v1-16-3
+  serviceName: qdrant-v1-16-3-headless
+  template:
+    metadata:
+      annotations:
+      labels:
+        app: qdrant-v1-16-3
+    spec:
+      containers:
+        - command:
+            - /bin/sh
+            - '-c'
+            - |
+              cd /qdrant
+              # 设置第一个peer的URI，其他peer使用bootstrap
+              if [ "$POD_NAME" = "qdrant-v1-16-3-0" ]; then
+                echo "Starting first peer with URI"
+                exec ./qdrant --uri "http://$POD_NAME.qdrant-v1-16-3-headless.$POD_NAMESPACE.svc.cluster.local:6335"
+              else
+                echo "Starting peer with bootstrap to qdrant-v1-16-3-0"
+                exec ./qdrant --bootstrap "http://qdrant-v1-16-3-0.qdrant-v1-16-3-headless.$POD_NAMESPACE.svc.cluster.local:6335" --uri "http://$POD_NAME.qdrant-v1-16-3-headless.$POD_NAMESPACE.svc.cluster.local:6335"
+              fi
+          env:
+            - name: QDRANT__CLUSTER__ENABLED
+              value: 'true'
+            - name: QDRANT__CLUSTER__HOST
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: status.podIP
+            - name: QDRANT__SERVICE__PORT
+              value: '6333'
+            - name: QDRANT__CLUSTER__GRPC_PORT
+              value: '6334'
+            - name: QDRANT__CLUSTER__P2P__PORT
+              value: '6335'
+            - name: QDRANT__SERVICE__API_KEY
+              valueFrom:
+                secretKeyRef:
+                  key: apikey
+                  name: qdrant-apikey-secret
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.namespace
+          image: qdrant/qdrant:v1.16.3
+          imagePullPolicy: IfNotPresent
+          name: qdrant
+          ports:
+            - containerPort: 6333
+              name: http
+              protocol: TCP
+            - containerPort: 6334
+              name: grpc
+              protocol: TCP
+            - containerPort: 6335
+              name: p2p
+              protocol: TCP
+          resources:
+            limits:
+              cpu: '2'
+              memory: 4Gi
+            requests:
+              cpu: '1'
+              memory: 2Gi
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /qdrant/storage
+              name: storage
+      dnsPolicy: ClusterFirst
+      imagePullSecrets:
+        - name: qdrant-registry-secret
+      nodeSelector:
+        type: virtual-kubelet
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 120
+      tolerations:
+        - effect: NoSchedule
+          key: virtual-kubelet.io/provider
+          operator: Exists
+  updateStrategy:
+    rollingUpdate:
+      partition: 0
+    type: RollingUpdate
+  volumeClaimTemplates:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: storage
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 20Gi
+        storageClassName: alicloud-disk-ssd
+        volumeMode: Filesystem
